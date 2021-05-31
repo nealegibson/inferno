@@ -470,6 +470,7 @@ class mcmc(object):
 
     #check extension and save in different formats
     if filename.split('.')[-1] == 'dill':
+      if not dill_available: raise ValueError("dill is not available to save class")
       dill.dump(self,open(filename,'wb'))
       if verbose: print("mcmc class saved to dill file: {}".format(filename))
     elif filename.split('.')[-1] == 'npy':

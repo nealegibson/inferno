@@ -47,6 +47,7 @@ print("logP =",logP(p-e,mu,K))
 
 #define the mcmc object with logP + args + optional pars
 mcmc = inferno.mcmc(logP, args=[mu,K],N=20)
+mcmc = inferno.mcmc_extended(logP, args=[mu,K],N=20)
 # mcmc = inferno.mcmc(logP, args=[mu,K],mode='MH') # 2 chains by default
 # mcmc = inferno.mcmc(logP, args=[mu,K],mode='Gibbs',N=5,parallel=0,gibbs_ind=[1,2,0,1,1,0,1,1,1,1])
 # mcmc = inferno.mcmc(logP, args=[mu,K],mode='MH',parallel=1)
