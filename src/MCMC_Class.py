@@ -310,7 +310,7 @@ class mcmc(object):
     
     #loop over burnin length and perform updates if required
     pbar_main = tqdm(range(n_steps),position=0,desc="burnin'")
-    pbar_updates = tqdm(total=self.n_burnin,position=1,desc=note,bar_format="{desc}{postfix}",leave=True)
+    pbar_updates = tqdm(total=self.n_burnin-1,position=1,desc=note,bar_format="{desc}{postfix}",leave=True)
     start_time = time.time()
     with pbar_updates:
       for i in pbar_main:      
@@ -331,6 +331,7 @@ class mcmc(object):
         if update: #update progress bar with some useful stats
           acc = self.burntAcc[i-self.burnin_chunk:i].sum()*100./self.burntAcc[i-self.burnin_chunk:i].size
           max_gr = max(self.computeGR(X=self.burntchains[(i-self.burnin_chunk)//self.thin:i//self.thin]))
+          pbar_updates.update(1)
           pbar_updates.set_postfix(acc="{:.1f}%".format(acc),gr="{:.3f}".format(max_gr))
         
     #close the pool if running in parallel
@@ -392,7 +393,7 @@ class mcmc(object):
     #loop over and perform updates to chain
     if desc is None: desc = "chain" if shift==0 else "extending chain"
     pbar_main = tqdm(range(n_steps),position=0,desc=desc)
-    pbar_updates = tqdm(total=n_updates,position=1,desc=note,bar_format="{desc}{postfix}",leave=True)
+    pbar_updates = tqdm(total=n_updates-1,position=1,desc=note,bar_format="{desc}{postfix}",leave=True)
     start_time = time.time()
     with pbar_updates:
       for i in pbar_main:      
@@ -413,6 +414,7 @@ class mcmc(object):
           acc = self.Acc[:shift+i].sum()*100./self.Acc[:shift+i].size
           max_gr = max(self.computeGR(X=self.chains[:shift+i//self.thin]))
           #pbar.set_postfix(acc="{:.2f}%".format(acc),gr="{:.3f}".format(max_gr))
+          pbar_updates.update(1)
           pbar_updates.set_postfix(acc="{:.2f}%".format(acc),gr="{:.3f}".format(max_gr))
 
     #close the pool if running in parallel
@@ -934,5 +936,52 @@ class mcmc(object):
     return np.mean(self.chains_reshaped(1),axis=0),np.std(self.chains_reshaped(1),axis=0)
   grs = property(computeGR)
   
-##########################################################################################
-##########################################################################################
+  ########################################################################################
+  ########################################################################################
+
+  def importanceSampler(self,Nsamples,dist='norm'):
+    """
+    Simple importance sampler using prior over current distribution.
+
+    """
+    import scipy.linalg as LA
+
+    #generate samples
+    p,K = self.p,self.cov
+    X = np.random.multivariate_normal(p,K,Nsamples)
+    
+    #get prior likelihood
+    r = X - p #residuals from mean
+    print(r.shape)
+    #reduce the covariance matrix
+    var_par = np.diag(K)>0
+    Ks = K.compress(var_par,axis=0)
+    Ks = Ks.compress(var_par,axis=1)
+    
+#    return r,var_par
+    r = r.compress(var_par,axis=0)
+#    r.compress(v,axis=0)
+    #compute the multivariate Gaussian
+    choFactor = LA.cho_factor(Ks,check_finite=False)
+    logdetK = (2*np.log(np.diag(choFactor[0])).sum())
+
+    #above is fixed for fixed mu and K, need to compute for each value of r
+    z = -0.5 * np.dot(r,LA.cho_solve(choFactor,r.T,check_finite=False)) - 0.5 * logdetK - (r[0].size/2.) * np.log(2*np.pi)
+    
+    if self.parallel: #open the pool if running in parallel
+      self.pool = multiprocessing.Pool(self.n_p)
+      self.map_func = self.pool.map    
+    
+    XlogP = self.map(X) #compute logP for each
+    
+    #close the pool if running in parallel
+    if self.parallel: self.pool.close()
+     
+    print("Importance Sampler in Development - needs imported from Infer")
+     
+    return X,XlogP,z,r
+     
+  ########################################################################################
+  ########################################################################################
+
+  

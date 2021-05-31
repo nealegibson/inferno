@@ -1,6 +1,7 @@
 
 import numpy as np
 import scipy.linalg as LA
+import matplotlib.pyplot as plt
 
 import inferno
 
@@ -12,6 +13,11 @@ K[0,1] = K[1,0] = 0.8
 K[2,3] = K[3,2] = -0.99
 K[5,8] = K[8,5] = 0.7
 def logP(x,mu,K):
+  """
+  Simple normal distribution.
+  could be sped up by computing chofactor, logdetK outside the distribution, but may
+    as well slow down the example.
+  """
   #get residuals from mean
   r = x - mu  
   #reduce the covariance matrix

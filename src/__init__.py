@@ -13,6 +13,7 @@ nealegibby@gmail.com
 
 from .MCMC_Class import *
 from .CorrelationPlots import *
+from .ChainPlots import *
 from .Conditionals import *
 from .Optimiser import *
 from .DifferentialEvolution import *
