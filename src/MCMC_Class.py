@@ -30,6 +30,19 @@ if sys.version_info >= (3, 8):
 #post_args = None #set global to None so function is defined
 def logP(pars):  return LogPosterior(pars,*post_args)
 
+def load_mcmc(dillfile):
+  """
+  Reload an mcmc object from dill file generated from mcmc.save()
+  This tries to reset the globals required for easy parallelisation. Function
+   dependencies may need to be imported.
+  No guarantee this will work on different platforms.
+  
+  """
+  mcmc = dill.load(open(dillfile,'rb'))
+  #run reset_logP to reset the globals used for parallelisation etc
+  mcmc.reset_logP()
+  return mcmc
+  
 class mcmc(object):
   """
   Creates OO version of MCMCs. Idea is that I can hold on to all of the parameters and
@@ -60,7 +73,9 @@ class mcmc(object):
     global post_args,LogPosterior
     post_args = args
     LogPosterior = logPost
-
+    self.logPost = logPost
+    self.args = args
+    
     #overwrite defaults if any provided
     for key,value in self.defaults.items():
       setattr(self,key,kwargs.get(key,value))
@@ -102,7 +117,14 @@ class mcmc(object):
     #run setup as well if certain keywords combos are added
     if setup_kwds['burn']>0 or setup_kwds['chain']>0 or setup_kwds['X'] is not None or (setup_kwds['p'] is not None and (setup_kwds['e'] is not None or setup_kwds['K'] is not None)):
       self.setup(**setup_kwds)
-
+  
+  def reset_logP(self):
+    #reset the logP globals
+    #this is required if the module is reloaded or mcmc instance is reloaded
+    global post_args,LogPosterior
+    post_args = self.args
+    LogPosterior = self.logPost
+  
   def set_mode(self,mode):
     #setup basic chain parameters and check conditions are ok
     if mode == 'DEMC':
@@ -123,16 +145,19 @@ class mcmc(object):
     else:
       raise ValueError("mode not found. Should be 'DEMC' or 'MH' or [other options to be added]")
   
+  #set filename as a property that sets/unsets autosave
   @property  
   def filename(self):
     return self._filename
   @filename.setter
   def filename(self,value):
+    if (not type(value) is str) and (not value is None):
+      raise ValueError("filename must be str or None")
+    self._filename = value
     if value is not None:
       self.autosave = True
     else:
       self.autosave = False
-    self._filename = value
       
   #define method to compute single logPosterior evaluation  
   @staticmethod 
@@ -420,7 +445,7 @@ class mcmc(object):
     #close the pool if running in parallel
     if self.parallel: self.pool.close()
     
-    if self.autosave: self.save()
+    if self.autosave: self.save(verbose=False)
 
     #print some acceptance stats etc, of whole chain
     ts = time.time() - start_time
@@ -429,13 +454,34 @@ class mcmc(object):
     print(' GR (max): {:.3f}'.format(self.computeGR().max()))
     return self.analyse_chains(verbose=verbose)
         
-  def save(self,filename=None,verbose=False):
-    """Save the current state of the chains"""
+  def save(self,filename=None,verbose=True):
+    """
+    Save the current state of the chains
+    Type of save/contents determined by string
+    Note that autoreload extension can mess up saving to dill files
+    Also reloading dill files requires running reset_logP to reset global parameters
     
+    """
+    
+    #get global filename if not provided
     if filename is None: filename = self.filename
-    np.savez(filename,chains=self.chains,X=self.X,K=self.K,log_prob=self.log_prob,Acc=self.Acc,var_K=self.var_K,var_g=self.var_g)
-    if verbose: print(" chains saved to {}".format(self.filename))
-    
+    if self.filename is None:
+      raise ValueError("mcmc save: filename must be provided or self.filename must be set")
+
+    #check extension and save in different formats
+    if filename.split('.')[-1] == 'dill':
+      dill.dump(self,open(filename,'wb'))
+      if verbose: print("mcmc class saved to dill file: {}".format(filename))
+    elif filename.split('.')[-1] == 'npy':
+      np.save(filename,self.chains)
+      if verbose: print("current chain saved as {}".format(filename))
+    elif filename.split('.')[-1] == 'npz':
+      np.savez(filename,chains=self.chains,X=self.X,burnin=self.burntchains,K=self.K,log_prob=self.log_prob,Acc=self.Acc)
+      if verbose: print("chain data saved to .npz archive: {}".format(filename))
+    else: #default if no extension provided
+      np.savez(filename,chains=self.chains,X=self.X,burnin=self.burntchains,K=self.K,log_prob=self.log_prob,Acc=self.Acc)
+      if verbose: print('no valid extension found - chain data saved to .npz archive: {}'.format(filename))
+        
   def reset(self):
     #reset chains and acceptance etc
     self.chains = None
