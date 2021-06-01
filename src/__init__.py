@@ -17,7 +17,7 @@ from .ImportanceSampler import *
 
 from .Conditionals import *
 from .Optimiser import *
-from .DifferentialEvolution import *
+from .GlobalOptimiser import *
 from .LevenbergMarquardt import *
 
 from .CorrelationPlots import *

@@ -20,6 +20,9 @@ def logP(x,mu,K):
   """
   #get residuals from mean
   r = x - mu  
+  
+  #if np.any(r<-0.6): return -np.inf
+  
   #reduce the covariance matrix
   var_par = np.diag(K)>0
   Ks = K.compress(var_par,axis=0)
@@ -47,10 +50,14 @@ print("logP =",logP(p-e,mu,K))
 
 #define the mcmc object with logP + args + optional pars
 mcmc = inferno.mcmc(logP, args=[mu,K],N=20)
-mcmc = inferno.mcmc_imsamp(logP, args=[mu,K],N=20)
 # mcmc = inferno.mcmc(logP, args=[mu,K],mode='MH') # 2 chains by default
 # mcmc = inferno.mcmc(logP, args=[mu,K],mode='Gibbs',N=5,parallel=0,gibbs_ind=[1,2,0,1,1,0,1,1,1,1])
 # mcmc = inferno.mcmc(logP, args=[mu,K],mode='MH',parallel=1)
+
+#note at this point can already use optimisers/slicers to refine initial conditions
+# p = mcmc.opt(p=p,e=e)
+# opt_par,pos_err,neg_err = mcmc.error1D(par_index,p=p,e=e)
+# p,e = mcmc.errors1D(p=p,e=e)
 
 #then set up the chain with initial conditions - most parameters can be set here too
 mcmc.setup(p=p,e=e)

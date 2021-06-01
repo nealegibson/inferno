@@ -12,6 +12,9 @@ try:
   dill_available = True
 except ImportError: dill_available = False
 
+from scipy.optimize import fmin,brentq
+from .Optimiser import optimise
+
 if sys.version_info >= (3, 8):
   #this basically creates a copy of the multiprocessing API with fork context
   #means I don't conflict with the existing multiprocessing method called
@@ -22,7 +25,6 @@ if sys.version_info >= (3, 8):
 #and there are I think more up to date methods to multiprocess with py3.8
 #multiprocessing.set_start_method("fork")
 #can only be called once - moved in __init__.py
-
 
 ##########################################################################################
 #redefine logP to not require args - for (more) convenient mapping
@@ -982,5 +984,177 @@ class mcmc(object):
     return np.mean(self.chains_reshaped(1),axis=0),np.std(self.chains_reshaped(1),axis=0)
   grs = property(computeGR)
   
+  ########################################################################################
+  ########################################################################################
+  #some convenience functions for exploring the posterior
+  
+  def logPslice(self,p_index,p=None,e=None,values=None,n_sig=5,n_samples=100,norm=False):
+    """
+    Simple function to return slice through the log posterior.
+    Tries to find the optimum from chains if p not provided
+    Needs range to be provided, or alternatively needs to use e if available
+    
+    """
+    
+    if p is None:
+      p = self.p #try and get mean of chains
+    
+    if values is None:
+      if e is None:
+        e = self.e #try and get e from class
+      values = np.linspace(p[p_index]-n_sig*e[p_index],p[p_index]+n_sig*e[p_index],n_samples)
+    
+    #create array to evaluate logP
+    X = np.outer(np.ones(values.size),p)
+    X[:,p_index] = values
+    
+    #evaluate the posterior
+    if self.parallel: #open the pool if running in parallel
+      self.pool = multiprocessing.Pool(self.n_p)
+      self.map_func = self.pool.map    
+    logP = self.map(X) #compute logP for each
+    #close the pool if running in parallel
+    if self.parallel: self.pool.close()
+      
+    if norm: logP -= logP.max() #equivalent to dividing P by max
+    
+    self.values = values #save values which could be useful for plotting
+    return logP
+
+  def Pslice(self,*args,**kwargs):
+    """
+    Simple function to return slice through the posterior.
+    Tries to find the optimum from chains if p not provided
+    Needs range to be provided, or alternatively needs to use e if available
+    
+    """
+    
+    kwargs['norm'] = True # overwrite norm arg to be true if provided
+    
+    return np.exp(self.logPslice(*args,**kwargs))
+  
+  def opt(self,p=None,fixed=None,e=None,*args,**kwargs):
+    """
+    Wrapper to call optimise using posterior distribution
+    """    
+    if p is None:
+      p = self.p #try and get mean of chains
+    
+    if fixed is None:
+      if e is None:
+        e = self.e #try and get e from class
+      fixed = np.isclose(e,0)
+      
+    return optimise(logP,p,[],fixed=fixed,*args,**kwargs)
+      
+  def logP_wrapper1D(self,x,p,loc,offset=0.):
+    """
+    Simple wrapper to return logP with single arg+location
+    """
+    
+    par = np.copy(p) #copy params
+    par[loc] = x #insert x into location
+    
+    #return the logPosterior
+    return logP(par) + offset
+
+  def neglogP_wrapper1D(self,x,p,loc,offset=0.):
+    """
+    Simple wrapper to return neglogP with single arg+location
+    """
+    
+    par = np.copy(p) #copy params
+    par[loc] = x #insert x into location
+    
+    #return the logPosterior
+    return -logP(par) + offset 
+  
+  def opt1D(self,p_index,p=None,e=None):
+    """
+    Simple function to optimise logP in 1D: p_index
+    """
+
+    if p is None:
+      p = self.p #try and get mean of chains
+    
+#     if e is None:
+#       e = self.e #try and get e from class
+    
+    par = np.copy(p)
+    par[p_index] = fmin(self.neglogP_wrapper1D,p[p_index],args=(p,p_index,0))
+    return par
+  
+  def error1D(self,p_index,p=None,e=None,max_attempts=1000):
+  
+    if p is None:
+      p = self.p #try and get mean of chains
+    
+    if e is None:
+      e = self.e #try and get e from class
+    
+    #copy the parameters
+    par = np.copy(p)
+    #first optimise in given dimension
+    r = fmin(self.neglogP_wrapper1D,p[p_index],args=(p,p_index,0),full_output=True,disp=False)
+    #get updated parameter array and max_likelihood
+    par[p_index] = r[0]
+    max_likelhood = -r[1]
+    
+    #check root finding equation is ok
+    #print(self.logP_wrapper1D(par[p_index],par,p_index,0.))
+    #print(self.logP_wrapper1D(par[p_index],par,p_index,0.5-max_likelhood))
+    
+    #ensure bracketed search crosses min
+    delta = 5.*e[p_index]
+    for i in range(max_attempts):
+      value = self.logP_wrapper1D(par[p_index]+delta,par,p_index,0.5-max_likelhood)
+      if value < 0: break
+      delta*=2 #multiply delta by 2 until negative value is found
+    if value == -np.inf: print("warning: reached restricted prior space in positive direction")
+    
+    #finally find bracketed search for postitive error, using max and delta as brackets
+    root_pos = brentq(self.logP_wrapper1D,par[p_index],par[p_index]+delta,(par,p_index,0.5-max_likelhood))
+    
+    #do the same for negative root, starting with current delta
+    for i in range(max_attempts):
+      value = self.logP_wrapper1D(par[p_index]-delta,par,p_index,0.5-max_likelhood)
+      if value < 0: break
+      delta*=2 #multiply delta by 2 until negative value is found
+#     while self.logP_wrapper1D(par[p_index]-delta,par,p_index,0.5-max_likelhood) >= 0.:
+#       delta*=2 #multiply delta by 2 until negative value is found
+    if value == -np.inf: print("warning: reached restricted prior space in negative direction")
+    root_neg = brentq(self.logP_wrapper1D,par[p_index]-delta,par[p_index],(par,p_index,0.5-max_likelhood))
+    
+    return par[p_index],root_pos-par[p_index],par[p_index]-root_neg
+
+  def errors1D(self,p=None,e=None,max_attempts=1000):
+    """
+    Simple wrapper to call error 1D in every dimension where e isn't 0
+  
+    """
+    
+    if p is None:
+      p = self.p #try and get mean of chains
+    
+    if e is None:
+      e = self.e #try and get e from class
+    
+    par,par_err = np.copy(p),np.copy(e)
+    
+    for i in np.arange(e.size)[e>0]:
+      
+      value,pos_err,neg_err = self.error1D(i,p=p,e=e,max_attempts=1000)
+      
+      par[i] = value
+      par_err[i] = (pos_err+neg_err)/2.
+    
+    return par,par_err
+      
+        
 ##########################################################################################
 ##########################################################################################
+
+#add some methods from external files
+from .ImportanceSampler import imsamp
+mcmc.imsamp = imsamp
+

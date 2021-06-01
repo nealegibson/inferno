@@ -21,6 +21,9 @@ def optimise(LogLikelihood,par,func_args,fixed=None,type='max',method='NM',maxit
   maxiter, maxfun - max iterations and function evaluations for the nelder-mead algorithm
   """
   
+  if LogLikelihood(par,*func_args) == -np.inf:
+    raise ValueError("logP(p,*func_args) is in restricted prior space")
+  
   if fixed is None:
     var_par = np.copy(par)
     fixed_par = np.zeros(var_par.size)
