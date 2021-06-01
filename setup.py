@@ -11,5 +11,5 @@ setup(
   
   packages=['inferno'],
   package_dir={'inferno':'src'},
-  install_requires=['numpy','scipy','tqdm'],
+  install_requires=['numpy','scipy','tqdm','dill'],
   )

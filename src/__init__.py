@@ -12,6 +12,7 @@ nealegibby@gmail.com
 """
 
 from .MCMC_Class import *
+from .MCMC_Class_Utils import *
 from .ImportanceSampler import *
 
 from .Conditionals import *
