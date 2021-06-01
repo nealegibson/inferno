@@ -42,7 +42,7 @@ def chainAxes(N,span=1,offset=0,width=5,labels=None,sharex=True,xticks=True,left
       
   return ax
   
-def chainPlot(X,fmt='-',alpha=1,ax=None,ax_hist=None,ax_acorr=None,conv=None,filt=True,x=None,labels=None,lw=0.5):
+def chainPlot(X,fmt='-',alpha=1,fig=None,conv=None,filt=True,x=None,labels=None,lw=0.5):
   """
   Plot the 1D chains.
   Assumes X is chainlength x Nchains x pars
@@ -72,13 +72,12 @@ def chainPlot(X,fmt='-',alpha=1,ax=None,ax_hist=None,ax_acorr=None,conv=None,fil
     filt = np.ones(S.shape[-1])>0
     
   #first get the axes if not provided
-  if ax is None:
-    ax = chainAxes(filt.sum(),3,labels=np.array(labels)[filt]) 
-  if ax_acorr is None:
-    ax_acorr = chainAxes(filt.sum(),1,3,) 
-  if ax_hist is None:
-    ax_hist = chainAxes(filt.sum(),1,4,sharex=False,xticks=False) 
-      
+  if fig is None: #create new plot by default if all axes are None
+    plt.figure()
+  ax = chainAxes(filt.sum(),3,labels=np.array(labels)[filt]) 
+  ax_acorr = chainAxes(filt.sum(),1,3,) 
+  ax_hist = chainAxes(filt.sum(),1,4,sharex=False,xticks=False) 
+  
   Sfilt = S[...,filt] #get rid of fixed parameters
   Sfilt_meansub = Sfilt - Sfilt.mean(axis=-1)[...,np.newaxis] #mean subtract chains (for acorr)
   for q in range(Sfilt.shape[2]):
@@ -93,7 +92,8 @@ def chainPlot(X,fmt='-',alpha=1,ax=None,ax_hist=None,ax_acorr=None,conv=None,fil
   ax_acorr[-1].set_xlabel('lag')        
   ax_acorr[-1].set_xticks([0,Sfilt_meansub.shape[0]//2])
       
-  return ax,ax_hist
+  return fig,ax,ax_acorr,ax_hist
 
 ###############################################################################
 ###############################################################################
+

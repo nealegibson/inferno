@@ -47,7 +47,7 @@ class mcmc(object):
   """
   Creates OO version of MCMCs. Idea is that I can hold on to all of the parameters and
   save the whole state, and incrementally improve chains etc.
-  Will also (eventually) extend to other modes of MCMC
+  Can also allow easy variation in chain flavour, and full parallelisation for each.
   
   """
   
