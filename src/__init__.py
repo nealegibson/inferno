@@ -23,3 +23,5 @@ from .LevenbergMarquardt import *
 from .CorrelationPlots import *
 from .ChainPlots import *
 
+from .Priors import *
+from .Likelihoods import *

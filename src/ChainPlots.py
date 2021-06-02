@@ -64,7 +64,7 @@ def chainPlot(X,fmt='-',alpha=1,fig=None,conv=None,filt=True,x=None,labels=None,
   else: raise ValueError("X not in correct format. Should be filename or list of filenames, multiple 2D arrays, or 3D array")
       
   #define labels is not done already (as need to reverse for inv)
-  if labels is None: labels = [r'$\theta_{{{}}}$'.format(i+1) for i in range(S.shape[-1])]
+  if labels is None: labels = [r'$\theta_{{{}}}$'.format(i) for i in range(S.shape[-1])]
 
   if filt: #filter out the fixed parameters
     filt = ~np.isclose(np.std(S,axis=(0,1)),0)
