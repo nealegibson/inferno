@@ -32,6 +32,7 @@ def logLikelihood_iid(func,x,y=None,e=None,beta=False,*args,**kwargs):
   def log_likelihood_beta(p):
     """
     log of iid normal dist with noise scaling factor beta
+    beta = noise if e not provided
     """
     
     r = y-func(p[:-1],x,*args,**kwargs)

@@ -7,6 +7,7 @@ import time
 import multiprocessing
 import sys
 from tqdm.auto import tqdm
+import pickle
 try:
   import dill
   dill_available = True
@@ -73,8 +74,8 @@ class mcmc(object):
   
     #posterior args and LogPosterior must be global to be pickleable (for parallel execution)
     global post_args,LogPosterior
-    post_args = args
     LogPosterior = logPost
+    post_args = args
     self.logPost = logPost
     self.args = args
     
@@ -123,6 +124,8 @@ class mcmc(object):
   def reset_logP(self):
     #reset the logP globals
     #this is required if the module is reloaded or mcmc instance is reloaded
+    #this is also required if another mcmc object is defined after, as global function is used
+    #solution is to call this before each reset/burnin/chain
     global post_args,LogPosterior
     post_args = self.args
     LogPosterior = self.logPost
@@ -186,7 +189,7 @@ class mcmc(object):
     print("not implemented yet")
     pass
     
-  def setup(self,X=None,mode=None,N=None,p=None,e=None,K=None,dist='norm',parallel=None,n_burnin=None,burn=0,chain=0,extend=0,cull=None,thin=None,filename=None,**kwargs):
+  def setup(self,X=None,mode=None,N=None,p=None,e=None,K=None,dist='norm',parallel=None,n_burnin=None,burn=0,chain=0,extend=0,cull=None,thin=None,filename=None,verbose=False,**kwargs):
     """
     Initialise the chain positions and compute logP for each
     """
@@ -223,7 +226,7 @@ class mcmc(object):
       self.X = X
     else: #draw samples from distribution
       self.X = self.draw_samples(p=p,e=e,K=K,dist=dist)
-        
+    
     #define initial covariance matrix
     if K is not None:
       self.K = K
@@ -235,6 +238,9 @@ class mcmc(object):
     #set error vector from cov matrix if not set or else set global value
     if e is None: self.errors = np.sqrt(np.diag(self.K))
     else: self.errors = e
+    
+    #call reset on logP globals - in case a new mcmc object is defined and overwrites it
+    self.reset_logP()
         
     #compute the logP for current X
     if self.parallel: #open/close the pool if running in parallel
@@ -272,6 +278,7 @@ class mcmc(object):
     self.log_prob = None
     self.Acc = None
     self.g_array = None #reset g_array - required for gibbs
+    self.Kn = None #reset Kn, required for non-global Gibbs/MH covariance
     
     #perform culling
     if self.cull:
@@ -285,8 +292,8 @@ class mcmc(object):
     #run burnin + chains
     if burn>0: self.burn(burn)
     if chain>0:
-      self.chain(chain) #run chain
-      if extend>0: self.extend(extend) #and any extensions
+      self.chain(chain,verbose=verbose) #run chain
+      if extend>0: self.extend(extend,verbose=verbose) #and any extensions
       return self.p,self.e #return results if chains run
       
   ########################################################################################
@@ -303,6 +310,9 @@ class mcmc(object):
     if not hasattr(self,'X'):
       raise ValueError("it looks like you haven't run setup yet!")
     
+    #call reset on logP globals - in case a new mcmc object is defined and overwrites it
+    self.reset_logP()
+
     #allow args to be changed for burnin parameters - some proposal type specific
     if n_burnin is not None:
       self.n_burnin = n_burnin
@@ -388,6 +398,9 @@ class mcmc(object):
     if not hasattr(self,'X'):
       raise ValueError("it looks like you haven't run setup yet!")
     
+    #call reset on logP globals - in case a new mcmc object is defined and overwrites it
+    self.reset_logP()
+
     #define or extend arrays to hold chain data
     #general shape chain_len x N_chains [x p.size]
     self.n_steps = n_steps
@@ -465,10 +478,18 @@ class mcmc(object):
     
     """
     
+    #need to delete the pool and map_func to save a parallel chain for some reason
+    #but these are reloaded anyway each time pool is used
+    if hasattr(self,'pool'): del self.pool
+    if hasattr(self,'map_func'): del self.map_func
+    
     #get global filename if not provided
     if filename is None: filename = self.filename
     if filename is None: raise ValueError("mcmc save: filename must be provided or self.filename must be set")
-
+    
+    #define keys saved to pickle file
+    pkl_save_keys = 'X burntchains burntAcc burntlogP Acc chains log_prob errors N n_gr g c var_K var_g K Kn global_K gibbs_ind g_array'.split()
+    
     #check extension and save in different formats
     if filename.split('.')[-1] == 'dill':
       if not dill_available: raise ValueError("dill is not available to save class")
@@ -478,12 +499,43 @@ class mcmc(object):
       np.save(filename,self.chains)
       if verbose: print("current chain saved as {}".format(filename))
     elif filename.split('.')[-1] == 'npz':
-      np.savez(filename,chains=self.chains,X=self.X,burnin=self.burntchains,K=self.K,log_prob=self.log_prob,Acc=self.Acc)
+      np.savez(filename,X=self.X,burntchains=self.burntchains,burntAcc=self.burntAcc,burntlogP=self.burntlogP,Acc=self.Acc,chains=self.chains,log_prob=self.log_prob)
       if verbose: print("chain data saved to .npz archive: {}".format(filename))
+    elif filename.split('.')[-1] == 'pkl':
+      pkl_save_dict = {k:getattr(self,k) for k in pkl_save_keys if hasattr(self,k)}
+      pickle.dump(pkl_save_dict,open(filename,'wb'))
+      if verbose: print("chain data saved to .pkl file: {}".format(filename))
     else: #default if no extension provided
-      np.savez(filename,chains=self.chains,X=self.X,burnin=self.burntchains,K=self.K,log_prob=self.log_prob,Acc=self.Acc)
-      if verbose: print('no valid extension found - chain data saved to .npz archive: {}'.format(filename))
-        
+      pkl_save_dict = {k:getattr(self,k) for k in pkl_save_keys if hasattr(self,k)}
+      pickle.dump(pkl_save_dict,open(filename+'.pkl','wb'))
+      if verbose: print("no valid extension found - chain data saved to .pkl file: {}".format(filename+'.pkl'))
+  
+  def load_pickle(self,filename=None,verbose=True):
+    """
+    """
+    #should write a little wrapper to load chains + burnin of MCMC from .npz file
+    #this will require a little thought, as if you'd want to continue the chains, would
+     # also need to re-instate the jump parameters etc, ie also save them, and only a subset may be initialised for each method
+     # would be simple enough to set some defaults
+     # MH - global g, K. Kn, 
+     # gibbs - global g, K, Kn
+     # DEMC - K, Kn?, 
+     # global_K, n_gr
+    
+    if filename is None:
+      filename = self.filename
+    if filename is None:
+      raise ValueError("mcmc load_state: filename must be provided or self.filename must be set")
+    
+    if filename.split('.')[-1] == 'pkl':
+      d = pickle.load(open(filename,'rb')) #get dictionary from pickle file
+      if verbose: print("chain data loaded from .pkl file: {}".format(filename))
+    else: #default if no extension provided
+      raise ValueError("filename must be a pickle file with .pkl extension to reload using load_state")
+    
+    #reload items of dictionary back into current chain state
+    for k in d: setattr(self,k,d[k])
+    
   def reset(self):
     #reset chains and acceptance etc
     self.chains = None
@@ -505,7 +557,7 @@ class mcmc(object):
         else: print('max GR stat reached target after {}/{} extensions'.format(n,n_extensions))
         return self.p,self.e
       #run extension to the chain
-      desc = 'running extension {}/{}'.format(n+1,n_extensions)
+      desc = 'running extension {}/{}'.format(n+1,self.n_extensions)
       self.chain(extension_length,*args,desc=desc,**kwargs)
     
     #check final state
@@ -678,7 +730,7 @@ class mcmc(object):
       if self.global_K:
         self.R = np.random.multivariate_normal(np.zeros(self.X.shape[1]),self.K,(self.n_steps,self.N)) * self.g[...,np.newaxis]
       else:
-        if not hasattr(self,'Kn'): self.Kn = [self.K for n in range(self.N)]
+        if self.Kn is None: self.Kn = [self.K for n in range(self.N)]
         self.R = np.empty((self.n_steps,self.N,self.X.shape[1]))
         for n in range(self.N): #loop over Kn and update each chain separately
           self.R[:,n] = np.random.multivariate_normal(np.zeros(self.X.shape[1]),self.Kn[n],(self.n_steps)) * self.g[n]
@@ -995,6 +1047,8 @@ class mcmc(object):
     Needs range to be provided, or alternatively needs to use e if available
     
     """
+    #call reset on logP globals - in case a new mcmc object is defined and overwrites it
+    self.reset_logP()
     
     if p is None:
       p = self.p #try and get mean of chains
@@ -1016,14 +1070,18 @@ class mcmc(object):
     #close the pool if running in parallel
     if self.parallel: self.pool.close()
       
-    if norm: logP -= logP.max() #equivalent to dividing P by max
+    if norm:
+      logP -= logP.max() #first get sensible values for exp, equivalent to dividing P by max
+      logP -= np.log(np.sum(np.exp(logP)*np.gradient(values))) #then normalise to the integral of P is 1 (obv very rough)
     
-    self.values = values #save values which could be useful for plotting
+    self.values = values #save values which might be useful for plotting
+    
     return logP
 
   def Pslice(self,*args,**kwargs):
     """
     Simple function to return slice through the posterior.
+    Wrapper around logPslice, see it for parameters
     Tries to find the optimum from chains if p not provided
     Needs range to be provided, or alternatively needs to use e if available
     
@@ -1037,6 +1095,9 @@ class mcmc(object):
     """
     Wrapper to call optimise using posterior distribution
     """    
+    #call reset on logP globals - in case a new mcmc object is defined and overwrites it
+    self.reset_logP()
+
     if p is None:
       p = self.p #try and get mean of chains
     
@@ -1074,6 +1135,9 @@ class mcmc(object):
     Simple function to optimise logP in 1D: p_index
     """
 
+    #call reset on logP globals - in case a new mcmc object is defined and overwrites it
+    self.reset_logP()
+
     if p is None:
       p = self.p #try and get mean of chains
     
@@ -1086,6 +1150,9 @@ class mcmc(object):
   
   def error1D(self,p_index,p=None,e=None,max_attempts=1000):
   
+    #call reset on logP globals - in case a new mcmc object is defined and overwrites it
+    self.reset_logP()
+
     if p is None:
       p = self.p #try and get mean of chains
     
@@ -1127,7 +1194,7 @@ class mcmc(object):
     
     return par[p_index],root_pos-par[p_index],par[p_index]-root_neg
 
-  def errors1D(self,p=None,e=None,max_attempts=1000):
+  def errors1D(self,p=None,e=None,max_attempts=1000,verbose=False):
     """
     Simple wrapper to call error 1D in every dimension where e isn't 0
   
@@ -1142,7 +1209,7 @@ class mcmc(object):
     par,par_err = np.copy(p),np.copy(e)
     
     for i in np.arange(e.size)[e>0]:
-      
+      if verbose: print("optiming+root finding p[{}]".format(i))
       value,pos_err,neg_err = self.error1D(i,p=p,e=e,max_attempts=1000)
       
       par[i] = value

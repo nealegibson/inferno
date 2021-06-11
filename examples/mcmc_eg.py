@@ -14,7 +14,7 @@ def logP(x,mu,K):
   could be sped up by computing chofactor, logdetK first, but will do for example.
   """
   r = x - mu  #get residuals from mean
-  print(x)
+
   #reduce the covariance matrix and residuals if any zeros in covariance diagonal
   var_par = np.diag(K)>0
   Ks = K.compress(var_par,axis=0).compress(var_par,axis=1)
@@ -27,8 +27,10 @@ def logP(x,mu,K):
 
 #define parameters of posterior distribution
 mu = np.ones(n_pars)
+mu[0] = 1.2
 K = np.diag(np.ones(mu.size)**2)
 #add some covaraince
+
 K[0,1] = K[1,0] = 0.8
 K[2,3] = K[3,2] = -0.99
 #K[5,8] = K[8,5] = 0.7
@@ -36,7 +38,7 @@ K[2,3] = K[3,2] = -0.99
 #define starting/guess parameters
 p = np.ones(n_pars) # pars
 e = np.ones(n_pars)*0.2 # errors
-p[2] = 1. # fix some parameters
+#p[0] = 1.2 # change some parameters
 e[2] = 0. # fix some parameters
 
 #test posterior works ok
@@ -49,7 +51,7 @@ e[2] = 0. # fix some parameters
 # p = inferno.DE(logP,p,[mu,K],epar=e)
 
 #define the mcmc object with logP + args + optional pars
-mcmc = inferno.mcmc(logP, args=[mu,K],N=20)
+mcmc = inferno.mcmc(logP, args=[mu,K],N=20,filename='test.pkl')
 # mcmc = inferno.mcmc(logP, args=[mu,K],mode='MH') # 2 chains by default
 # mcmc = inferno.mcmc(logP, args=[mu,K],mode='Gibbs',N=5,parallel=0,gibbs_ind=[1,2,0,1,1,0,1,1,1,1])
 # mcmc = inferno.mcmc(logP, args=[mu,K],mode='MH',parallel=1)

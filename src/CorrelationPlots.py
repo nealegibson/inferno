@@ -109,7 +109,7 @@ def correlationScatterPlot(X,ax=False,samples=100,inv=False,alpha=0.6,zorder=3,*
 
 ###############################################################################
 
-def correlationCrossHairs(x,ax=False,inv=False,alpha=0.6,zorder=3,lw=0.5,ls=':',color='0.4',**kwargs):
+def correlationCrossHairs(x,ax=False,inv=False,alpha=0.6,zorder=3,lw=1.5,ls='--',color='0.2',**kwargs):
   """
   Plot cross-hairs for a known point, e.g. to test simulations
   
@@ -155,7 +155,7 @@ def correlationEllipses(X=None,mu=None,K=None,ax=False,inv=False,alpha=0.6,zorde
   else: #use K
     N = K.shape[0]
     if mu is None:
-      mu = np.zeros(N)
+      raise ValueError("Must provide mean mu as well as cov K")
   
   #create axes if not provided
   if ax==False:  

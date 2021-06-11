@@ -121,5 +121,52 @@ def addlogPrior(*args,**kwargs):
   if func is None: return decorator
   else: return log_posterior
 
+def addlogPriorClassMethod(*args,**kwargs):
+  """
+  Same as above, but for use within class methods
+  Not properly tested, but appears to work if placed before call within class.
+  Outside the class, the normal version can be used.
+  Presumably because a call to func(x,...) will automatically revert to func(self,x,...) anyway
+  """
+  
+  #check if first argument is a callable function, and if so remove it from args tuple
+  #and set func to args[0]
+  if len(args)>0 and callable(args[0]):
+    func = args[0]
+    args = args[1:]
+  else: func=None #otherwise set func to None
+  
+  #create the logPrior function
+  log_prior = logPrior(*args,**kwargs)
+  
+  #define posterior to return
+  def log_posterior(self,x,*args,**kwargs):
+    """
+    logPosterior with added prior
+    """
+    #first get logPrior and check is not -np.inf
+    lp = log_prior(x)
+    if lp == -np.inf: return -np.inf
+    else: return lp + func(self,x,*args,**kwargs)
+  
+  #or otherwise a decorator with same nested posterior
+  def decorator(func):
+    """
+    Decorator that takes in func and adds log_prior
+    """
+    def log_posterior(self,x,*args,**kwargs):
+      """
+      logPosterior with added prior
+      """
+      #first get logPrior and check is not -np.inf
+      lp = log_prior(x)
+      if lp == -np.inf: return -np.inf
+      else: return lp + func(self,x,*args,**kwargs)
+            
+    return log_posterior
+  
+  if func is None: return decorator
+  else: return log_posterior
+
 
   

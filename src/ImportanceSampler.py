@@ -9,7 +9,7 @@ import sys
 from tqdm.auto import tqdm
 
 import scipy.stats
-from . import MCMC_Class
+#from . import MCMC_Class
 
 #method that can be added to main mcmc class directly
 def imsamp(self,n_samples,m=None,K=None,scaling=2,verbose=True):

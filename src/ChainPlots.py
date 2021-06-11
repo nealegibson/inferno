@@ -79,7 +79,8 @@ def chainPlot(X,fmt='-',alpha=1,fig=None,conv=None,filt=True,x=None,labels=None,
   ax_hist = chainAxes(filt.sum(),1,4,sharex=False,xticks=False) 
   
   Sfilt = S[...,filt] #get rid of fixed parameters
-  Sfilt_meansub = Sfilt - Sfilt.mean(axis=-1)[...,np.newaxis] #mean subtract chains (for acorr)
+  #Sfilt_meansub = Sfilt - Sfilt.mean(axis=(0,1)) #mean subtract chains using global mean (for acorr)
+  Sfilt_meansub = Sfilt - Sfilt.mean(axis=(0))[np.newaxis,:,:] #mean subtract each chain (for acorr)
   for q in range(Sfilt.shape[2]):
     for i in range(Sfilt.shape[1]): #loop over chains
       ax[q].plot(Sfilt[:,i,q],fmt,lw=lw,alpha=alpha)
