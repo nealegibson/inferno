@@ -135,20 +135,25 @@ class mcmc(object):
     if mode == 'DEMC':
       #assert self.N>=8, "N must be >=8 for DEMC algorithm"
       if not self.N>=8: raise ValueError("N must be >=8 for DEMC algorithm")
-      self.proposal = self.demc_proposal
+      self.proposal_step = self.demc_proposal
       if self.cull is None: self.cull = True #cull DEMC by default
     elif mode == 'MH':
       #assert self.N>=2, "N must be >=2 for MH algorithm"
       if not self.N>=2: raise ValueError("N must be >=2 for MH algorithm")
-      self.proposal = self.mh_proposal
+      self.proposal_step = self.mh_proposal
       if self.cull is None: self.cull = False #do not cull MH by default
     elif mode == 'Gibbs':
       #assert self.N>=2, "N must be >=2 for MH algorithm"
       if not self.N>=2: raise ValueError("N must be >=2 for Gibbs algorithm")
-      self.proposal = self.gibbs_proposal
+      self.proposal_step = self.gibbs_proposal
       if self.cull is None: self.cull = False #do not cull Gibbs by default
+    elif mode == 'AffInv':
+      #assert self.N>=2, "N must be >=2 for MH algorithm"
+      if not self.N>=8: raise ValueError("N must be >=2 for Affine Invariant algorithm")
+      self.proposal_step = self.affineinv_proposal
+      if self.cull is None: self.cull = True #cull Gibbs by default
     else:
-      raise ValueError("mode not found. Should be 'DEMC' or 'MH' or [other options to be added]")
+      raise ValueError("mode not found. Should be 'DEMC', 'MH', 'Gibbs' or 'AffInv'")
   
   #set filename as a property that sets/unsets autosave
   @property  
@@ -343,7 +348,7 @@ class mcmc(object):
       self.map_func = self.pool.map    
     
     #create random number array for acceptance step
-    self.RandNoArr = np.random.rand(n_steps,self.N)
+#    self.RandNoArr = np.random.rand(n_steps,self.N)
     
     #loop over burnin length and perform updates if required
     pbar_main = tqdm(range(n_steps),position=0,desc="burnin'")
@@ -352,13 +357,17 @@ class mcmc(object):
     with pbar_updates:
       for i in pbar_main:      
         update = i in self.update_steps
-        X_prop = self.proposal(i,update=update) #create proposal step and optionally update
-        XlogP_prop = self.map(X_prop) #compute logP for each
-        
-        #accept the steps, and update the current state of the chains
-        accept = self.RandNoArr[i] < np.exp(XlogP_prop - self.XlogP)
-        self.XlogP[accept] = XlogP_prop[accept]
-        self.X[accept] = X_prop[accept]
+
+#         X_prop = self.proposal(i,update=update) #create proposal step and optionally update
+#         XlogP_prop = self.map(X_prop) #compute logP for each
+#         
+#         #accept the steps, and update the current state of the chains
+#         accept = self.RandNoArr[i] < np.exp(XlogP_prop - self.XlogP)
+#         self.XlogP[accept] = XlogP_prop[accept]
+#         self.X[accept] = X_prop[accept]
+
+        #perform single step of chain
+        accept = self.proposal_step(i,update=update)
         
         #store the results
         self.burntAcc[i,accept] = True
@@ -375,7 +384,7 @@ class mcmc(object):
     if self.parallel: self.pool.close()
 
     #perform final update to proposal steps - useful for non-uniform burnins
-    self.proposal(i,update=True,update_only=True)
+    self.proposal_step(i,update=True,update_only=True)
     
     #print some acceptance stats etc, of whole chain
     #in this recompute acc and max_gr for final chunks
@@ -428,7 +437,7 @@ class mcmc(object):
       self.map_func = self.pool.map    
     
     #create random number array for acceptance step
-    self.RandNoArr = np.random.rand(n_steps,self.N)
+#    self.RandNoArr = np.random.rand(n_steps,self.N)
         
     #loop over and perform updates to chain
     if desc is None: desc = "chain" if shift==0 else "extending chain"
@@ -437,14 +446,18 @@ class mcmc(object):
     start_time = time.time()
     with pbar_updates:
       for i in pbar_main:      
-        X_prop = self.proposal(i) #create proposal step
-        XlogP_prop = self.map(X_prop) #compute logP for each
-      
-        #accept the steps, and update the current state of the chains
-        accept = self.RandNoArr[i] < np.exp(XlogP_prop - self.XlogP)
-        self.XlogP[accept] = XlogP_prop[accept]
-        self.X[accept] = X_prop[accept]
+
+#         X_prop = self.proposal(i) #create proposal step
+#         XlogP_prop = self.map(X_prop) #compute logP for each
+#       
+#         #accept the steps, and update the current state of the chains
+#         accept = self.RandNoArr[i] < np.exp(XlogP_prop - self.XlogP)
+#         self.XlogP[accept] = XlogP_prop[accept]
+#         self.X[accept] = X_prop[accept]
         
+        #run proposal step
+        accept = self.proposal_step(i)
+
         #store the results
         self.Acc[shift+i,accept] = True
         #add current posterior and parameters to chain
@@ -660,6 +673,9 @@ class mcmc(object):
     """
     
     if i == 0: #initialise any relevant parameters at start of chain
+      
+      self.RandNoArr = np.random.rand(self.n_steps,self.N) #for acceptance step
+
       if self.n_gr is None: self.n_gr = 4
       if self.g is None: self.g = 2.38 / 2. / np.sum(~np.isclose(self.errors,0.))
       self.gamma = np.ones(self.n_steps) * self.g
@@ -713,7 +729,16 @@ class mcmc(object):
     
     #generate proposal step from current set of chains and return
     X_prop = self.X + self.gamma[i] * (self.X[self.rc[i,:,0]] - self.X[self.rc[i,:,1]]) + self.R[i]
-    return X_prop
+    
+    #get logP for proposal
+    XlogP_prop = self.map(X_prop) #compute logP for each
+  
+    #accept the steps, and update the current state of the chains
+    accept = self.RandNoArr[i] < np.exp(XlogP_prop - self.XlogP)
+    self.XlogP[accept] = XlogP_prop[accept]
+    self.X[accept] = X_prop[accept]
+    
+    return accept
     
   def mh_proposal(self,i,update=False,update_only=False):
     """
@@ -725,6 +750,9 @@ class mcmc(object):
     """
     
     if i == 0: #initialise any relevant parameters at start of chain
+
+      self.RandNoArr = np.random.rand(self.n_steps,self.N) #for acceptance step
+
       if self.n_gr is None: self.n_gr = self.N
       if self.g is None: self.g = 2.4**2 / np.sum(~np.isclose(self.errors,0.)) * np.ones(self.N)
       if self.global_K:
@@ -777,7 +805,16 @@ class mcmc(object):
     
     #generate proposal step from current set of chains and return
     X_prop = self.X + self.R[i]
-    return X_prop
+
+    #get logP for proposal
+    XlogP_prop = self.map(X_prop) #compute logP for each
+  
+    #accept the steps, and update the current state of the chains
+    accept = self.RandNoArr[i] < np.exp(XlogP_prop - self.XlogP)
+    self.XlogP[accept] = XlogP_prop[accept]
+    self.X[accept] = X_prop[accept]
+    
+    return accept
    
   def gibbs_proposal(self,i,update=False,update_only=False):
     """
@@ -799,8 +836,8 @@ class mcmc(object):
 
       #create new random number array for internal acceptance step
       #don't need final gibbs step - that will be handled by main chain
-      self.gibbsRandNoArr = np.random.rand(self.RandNoArr.shape[0],n_gibbs-1,self.N)
-      self.gibbsAcc = np.full((self.RandNoArr.shape[0],n_gibbs-1,self.N),False) #bool array
+      self.gibbsRandNoArr = np.random.rand(self.n_steps,n_gibbs,self.N)
+      self.gibbsAcc = np.full((self.n_steps,n_gibbs,self.N),False) #bool array
       #point MainAcc to current chain? Not needed as updates only done with bunrtAcc
       #self.mainAcc = self.Acc if self.last_run == 'chain' else self.burntAcc
       
@@ -889,7 +926,7 @@ class mcmc(object):
       X_prop_gibbs = np.copy(self.X)
       X_prop_gibbs[:,self.gibbs_indices[q]] += self.R[i][:,self.gibbs_indices[q]]
       #if the last step, send back to normal chain
-      if q==self.n_gibbs-1: return X_prop_gibbs
+#      if q==self.n_gibbs-1: return X_prop_gibbs
       #else evaluate within func
       XlogP_prop_gibbs = self.map(X_prop_gibbs) #compute logP for each      
 #     #accept the steps, and update the current state of the chains
@@ -900,8 +937,77 @@ class mcmc(object):
       #print('carefully check if this works for i,q,boolean array index')
       #looks ok for 2 ints + accept 
       self.gibbsAcc[i,q,accept] = True
+    
+    return accept
+    
+#     print("Something went wrong in gibbs_proposal - you shouldn't be here!")
 
-    print("Something went wrong in gibbs_proposal - you shouldn't be here!")
+  def affineinv_proposal(self,i,update=False,update_only=False):
+        
+    if i == 0: #initialise any relevant parameters at start of chain
+      self.RandNoArr = np.random.rand(self.n_steps,self.N) #for acceptance step
+
+      if self.n_gr is None: self.n_gr = 4
+      
+      #get the array of z parameters
+      self.a = 2 #fix a parameter for now
+      x = np.random.rand(self.n_steps,self.N) * (np.sqrt(4.*self.a)-np.sqrt(4./self.a)) + np.sqrt(4./self.a)
+      self.z = x**2 / 4.
+      self.Dm1 = np.sum(self.errors>0)-1
+      self.z_Dm1 = self.z**self.Dm1
+            
+#       if not self.parallel: #for normal execution, choose from remainder of chain, ie exclude n
+#         #get random numbers from 0 to N-1 inclusive
+#         self.rc = np.random.randint(0,self.N-1,(self.n_steps,self.N))
+#         #and replace any 'self picks' to be N-1 to get random pick of other chain
+#         self.rc[np.where(self.rc == np.arange(self.N))] = self.N-1 # ie replace with n-1      
+
+      #always pick the updates in two halfs to update prop steps in chuncks
+      assert self.N%2==0, "N must be even for affine inv"
+      #just pick random ints up to N//2
+      self.rc = np.random.randint(0,self.N//2,(self.n_steps,self.N))
+      #then add on N//2 for 1st set of chains
+      self.rc[:,:self.N//2]+=self.N//2
+
+    elif update: #no updates done for Affine Inv MCMC
+      if update_only:
+        #print("update step only - returning")
+        return 1
+    
+    #generate proposal step from current set of chains and return
+#     X_prop = self.X[self.rc[i,:]] + self.z[i][:,np.newaxis] * (self.X - self.X[self.rc[i,:]])
+#     #strictly speaking need to update first chunk first
+#     if i==0:
+#       print("affine inv not fully tested yet")  
+#       print("warning affine inv needs updated in chunks")
+#     
+#     #get logP for proposal
+#     XlogP_prop = self.map(X_prop) #compute logP for each
+#   
+#     #accept the steps, and update the current state of the chains
+#     accept = self.RandNoArr[i] < self.z_Dm1[i] * np.exp(XlogP_prop - self.XlogP)
+#     self.XlogP[accept] = XlogP_prop[accept]
+#     self.X[accept] = X_prop[accept]
+
+    #generate proposal step for first half of chain
+    X_prop = self.X[self.rc[i,:self.N//2]] + self.z[i][:self.N//2,np.newaxis] * (self.X[:self.N//2] - self.X[self.rc[i,:self.N//2]])
+    #get logP for proposal
+    XlogP_prop = self.map(X_prop) #compute logP for each
+    #accept the steps, and update the current state of the chains
+    accept1 = self.RandNoArr[i,:self.N//2] < self.z_Dm1[i,:self.N//2] * np.exp(XlogP_prop - self.XlogP[:self.N//2])
+    self.XlogP[:self.N//2][accept1] = XlogP_prop[accept1]
+    self.X[:self.N//2][accept1] = X_prop[accept1]
+    
+    #and repeat for 2nd half of chain using new positions to update proposals
+    X_prop = self.X[self.rc[i,self.N//2:]] + self.z[i][self.N//2:,np.newaxis] * (self.X[self.N//2:] - self.X[self.rc[i,self.N//2:]])
+    #get logP for proposal
+    XlogP_prop = self.map(X_prop) #compute logP for each
+    #accept the steps, and update the current state of the chains
+    accept2 = self.RandNoArr[i,self.N//2:] < self.z_Dm1[i,self.N//2:] * np.exp(XlogP_prop - self.XlogP[self.N//2:])
+    self.XlogP[self.N//2:][accept2] = XlogP_prop[accept2]
+    self.X[self.N//2:][accept2] = X_prop[accept2]
+    
+    return np.hstack([accept1,accept2])
     
   ########################################################################################
   ########################################################################################

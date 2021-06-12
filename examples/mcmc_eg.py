@@ -19,7 +19,7 @@ def logP(x,mu,K):
   var_par = np.diag(K)>0
   Ks = K.compress(var_par,axis=0).compress(var_par,axis=1)
   r = r.compress(var_par)
-
+  
   #finally compute the multivariate Gaussian and return
   choFactor = LA.cho_factor(Ks,check_finite=False)
   logdetK = (2*np.log(np.diag(choFactor[0])).sum())
@@ -39,7 +39,7 @@ K[2,3] = K[3,2] = -0.99
 p = np.ones(n_pars) # pars
 e = np.ones(n_pars)*0.2 # errors
 #p[0] = 1.2 # change some parameters
-e[2] = 0. # fix some parameters
+#e[2] = 0. # fix some parameters
 
 #test posterior works ok
 # print("logP =",logP(p,mu,K))
@@ -51,10 +51,12 @@ e[2] = 0. # fix some parameters
 # p = inferno.DE(logP,p,[mu,K],epar=e)
 
 #define the mcmc object with logP + args + optional pars
-mcmc = inferno.mcmc(logP, args=[mu,K],N=20,filename='test.pkl')
-# mcmc = inferno.mcmc(logP, args=[mu,K],mode='MH') # 2 chains by default
-# mcmc = inferno.mcmc(logP, args=[mu,K],mode='Gibbs',N=5,parallel=0,gibbs_ind=[1,2,0,1,1,0,1,1,1,1])
-# mcmc = inferno.mcmc(logP, args=[mu,K],mode='MH',parallel=1)
+#mcmc = inferno.mcmc(logP, args=[mu,K],N=20,mode='DEMC',filename='test.pkl')
+mcmc = inferno.mcmc(logP, args=[mu,K],mode='MH') # 2 chains by default
+mcmc = inferno.mcmc(logP, args=[mu,K],mode='Gibbs',N=4,parallel=0,gibbs_ind=[1,2,2,1,1])
+# #mcmc = inferno.mcmc(logP, args=[mu,K],mode='MH',N=20,parallel=1)
+# mcmc = inferno.mcmc(logP, args=[mu,K],mode='AffInv',N=100,parallel=0)
+# mcmc = inferno.mcmc(logP, args=[mu,K],mode='DEMC',N=100,parallel=0)
 
 #use built in wrappers for optimisers/slicers to refine initial conditions
 # p = mcmc.opt(p=p,e=e)
@@ -72,7 +74,7 @@ mcmc.setup(p=p,e=e)
 
 #then run the chain(s)
 mcmc.burn(1000) #perform burnin of length 2000
-pars,errors = mcmc.chain(5000,verbose=True) #run main chain of length 2000
+pars,errors = mcmc.chain(20000,verbose=True) #run main chain of length 2000
 # pars,errors = mcmc.chain(5000,verbose=True) #extend the chain again
 
 #create some plots of the chain/distributions
