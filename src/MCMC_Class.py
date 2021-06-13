@@ -63,6 +63,7 @@ class mcmc(object):
                   orth=False,global_K=True, #MH defaults
                   var_g=True,g=None,c=1e-5,n_gamma=10,g_glob=0.999, #DEMC defaults
                   gibbs_ind = None, #BlockedGibbs defaults
+                  a=2, var_a=True,#AffInv defaults
                   )
     
   def __init__(self,logPost,args=[],N=2,mode='DEMC',filename=None,n_burnin=5,\
@@ -950,7 +951,7 @@ class mcmc(object):
       if self.n_gr is None: self.n_gr = 4
       
       #get the array of z parameters
-      self.a = 2 #fix a parameter for now
+      #self.a = 2 #fix a parameter for now
       x = np.random.rand(self.n_steps,self.N) * (np.sqrt(4.*self.a)-np.sqrt(4./self.a)) + np.sqrt(4./self.a)
       self.z = x**2 / 4.
       self.Dm1 = np.sum(self.errors>0)-1
@@ -970,6 +971,19 @@ class mcmc(object):
       self.rc[:,:self.N//2]+=self.N//2
 
     elif update: #no updates done for Affine Inv MCMC
+
+      if self.var_a:
+        sl = slice(i-self.burnin_chunk,i) #no thinning applied to acceptance array
+        #target_acc = 0.234 #target acceptance
+        #rescale a for target acceptance in each chain
+        acc = self.burntAcc[sl].sum() / self.burntAcc[sl].size
+        self.a *= (1./self.target_acc) * min(0.8,max(0.1,acc))
+        if not update_only:
+          x = np.random.rand(self.n_steps-i,self.N) * (np.sqrt(4.*self.a)-np.sqrt(4./self.a)) + np.sqrt(4./self.a)
+          self.z[i:] = x**2 / 4.
+  #        self.Dm1 = np.sum(self.errors>0)-1
+          self.z_Dm1[i:] = self.z[i:]**self.Dm1
+        
       if update_only:
         #print("update step only - returning")
         return 1
