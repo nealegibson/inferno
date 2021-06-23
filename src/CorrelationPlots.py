@@ -359,7 +359,7 @@ def samplePlot(X,conv=None,fig=None,hist=True,scatter=True,filt=True,x=None,inv=
     if x is not None: x = x[::-1]
   
   #first get the axes
-  if fig is None: plt.figure()
+  if fig is None: fig = plt.figure()
   ax = correlationAxes(filt.sum(),inv=inv,labels=np.array(labels)[filt])
 
   #do histograms

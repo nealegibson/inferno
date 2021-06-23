@@ -55,8 +55,8 @@ e = np.ones(n_pars)*0.2 # errors
 # mcmc = inferno.mcmc(logP, args=[mu,K],mode='MH') # 2 chains by default
 # mcmc = inferno.mcmc(logP, args=[mu,K],mode='Gibbs',N=4,parallel=0,gibbs_ind=[1,2,2,1,1])
 # #mcmc = inferno.mcmc(logP, args=[mu,K],mode='MH',N=20,parallel=1)
-mcmc = inferno.mcmc(logP, args=[mu,K],mode='AffInv',N=100,parallel=0)
-# mcmc = inferno.mcmc(logP, args=[mu,K],mode='DEMC',N=100,parallel=0)
+# mcmc = inferno.mcmc(logP, args=[mu,K],mode='AffInv',N=100,parallel=0)
+mcmc = inferno.mcmc(logP, args=[mu,K],mode='DEMC',N=100,parallel=0)
 
 #use built in wrappers for optimisers/slicers to refine initial conditions
 # p = mcmc.opt(p=p,e=e)
@@ -73,8 +73,8 @@ mcmc.setup(p=p,e=e)
 # pars,errors = mcmc.setup(p=p,e=e,burn=1000,chain=5000) #run the burnin+chains immediately
 
 #then run the chain(s)
-mcmc.burn(1000) #perform burnin of length 2000
-pars,errors = mcmc.chain(2000,verbose=True) #run main chain of length 2000
+mcmc.burn(100) #perform burnin of length 2000
+pars,errors = mcmc.chain(200,verbose=True) #run main chain of length 2000
 # pars,errors = mcmc.chain(5000,verbose=True) #extend the chain again
 
 #create some plots of the chain/distributions

@@ -295,7 +295,10 @@ class mcmc(object):
       if self.parallel: self.pool.close()
       self.redraw_culled()
     
-    #run burnin + chains
+    #store starting points of the chain
+    self.Xstart = np.copy(self.X)
+    
+    #run burnin + chains if >0
     if burn>0: self.burn(burn)
     if chain>0:
       self.chain(chain,verbose=verbose) #run chain
@@ -823,6 +826,8 @@ class mcmc(object):
     the log posterior at each and accepting them according to the MH rule.
     
     """
+    
+    print('warning: Gibbs sampler needs to be updated to estimate (conditioned?) covariance of each block?')
     
     if i == 0: #initialise any relevant parameters at start of chain
       #first check gibbs index is ok

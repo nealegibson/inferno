@@ -25,3 +25,6 @@ from .ChainPlots import *
 
 from .Priors import *
 from .Likelihoods import *
+
+from .MiniOpt import *
+from .MiniMCMC import *
