@@ -25,7 +25,7 @@ def correlationAxes(N,inv=False,labels=None,left=0.07,bottom=0.07,right=0.93,top
   if not inv:
     for i in range(N): #loop over the parameter indexes supplied
       for q in range(i+1):
-        ax['{}{}'.format(i,q)] = plt.subplot(N,N,i*N+q+1,xticks=[],yticks=[])
+        ax['{}{}'.format(i,q)] = plt.gcf().add_subplot(N,N,i*N+q+1,xticks=[],yticks=[])
         #add labels...
         if i == (N-1): ax['{}{}'.format(i,q)].set_xlabel(labels[q])
       ax['{}{}'.format(i,0)].set_ylabel(labels[i])
@@ -35,7 +35,50 @@ def correlationAxes(N,inv=False,labels=None,left=0.07,bottom=0.07,right=0.93,top
     print('Need to refine labels + positions for inverse axes')
     for i in range(N):
       for q in range(i+1):
-        ax['{}{}'.format(i,q)] = plt.subplot(N,N,(N-i)*N-q,xticks=[],yticks=[])
+        ax['{}{}'.format(i,q)] = plt.gcf().add_subplot(N,N,(N-i)*N-q,xticks=[],yticks=[])
+        if i == (N-1):
+          ax['{}{}'.format(i,q)].set_xlabel(labels[q])
+          ax['{}{}'.format(i,q)].xaxis.set_label_position('top') 
+          
+      ax['{}{}'.format(i,0)].set_ylabel(labels[i])
+      ax['{}{}'.format(i,0)].yaxis.set_label_position('right') 
+  
+  plt.subplots_adjust(left=left,bottom=bottom,right=right,top=top,wspace=wspace,hspace=hspace)
+  
+  return ax
+
+def correlationAxesPadded(N,inv=False,labels=None,left=0.07,bottom=0.07,right=0.93,top=0.93,wspace=0.03,hspace=0.03):
+  """
+  Returns axes for correlation plots
+  
+  row_pad - add some more space for each row
+  col_pad - add some more space for each column
+  row_add - offset by rows
+  col_add - offset by cols
+  
+  """
+  
+  print("not yet supported/tested!")
+  
+  ax = {}
+  if labels is None:
+    labels = [r'$\theta_{{{}}}$'.format(i) for i in range(N)]
+  
+  #create normal axes
+  if not inv:
+    for i in range(N): #loop over the parameter indexes supplied
+      for q in range(i+1):
+        ax['{}{}'.format(i,q)] = plt.gcf().add_subplot(N,N,i*N+q+1,xticks=[],yticks=[])
+        #add labels...
+        if i == (N-1): ax['{}{}'.format(i,q)].set_xlabel(labels[q])
+      ax['{}{}'.format(i,0)].set_ylabel(labels[i])
+        
+  #or inverse axes
+  else:
+    print('Need to refine labels + positions for inverse axes')
+    for i in range(N):
+      for q in range(i+1):
+        ax['{}{}'.format(i,q)] = plt.gcf().add_subplot(N,N,(N-i)*N-q,xticks=[],yticks=[])
         if i == (N-1):
           ax['{}{}'.format(i,q)].set_xlabel(labels[q])
           ax['{}{}'.format(i,q)].xaxis.set_label_position('top') 
@@ -90,7 +133,7 @@ def correlationNormalMarg(p,pe,X=None,Nsig=5,Nsamp=500,ax=False,inv=False,**kwar
   
 ###############################################################################
 
-def correlationScatterPlot(X,ax=False,samples=100,inv=False,alpha=0.6,zorder=3,**kwargs):
+def correlationScatterPlot(X,ax=False,fmt='.',samples=100,inv=False,alpha=0.6,zorder=3,**kwargs):
   
   #get no of dimensions
   S,N = X.shape
@@ -103,7 +146,7 @@ def correlationScatterPlot(X,ax=False,samples=100,inv=False,alpha=0.6,zorder=3,*
   #loop over the axes (except-diagonals) and make scatter plot
   for i in range(N): #loop over the parameter indexes supplied
     for q in range(i):
-      ax['{}{}'.format(i,q)].plot(X[:,q][ind],X[:,i][ind],'.',alpha=alpha,zorder=zorder,**kwargs)
+      ax['{}{}'.format(i,q)].plot(X[:,q][ind],X[:,i][ind],fmt,alpha=alpha,zorder=zorder,**kwargs)
   
   return ax
 

@@ -16,7 +16,7 @@ except ImportError: dill_available = False
 from scipy.optimize import fmin,brentq
 from .Optimiser import optimise
 
-if sys.version_info >= (3, 8):
+if sys.version_info >= (3, 8) and not sys.platform == 'win32':
   #this basically creates a copy of the multiprocessing API with fork context
   #means I don't conflict with the existing multiprocessing method called
   #resetting the method via set_start_method can only be done once!
@@ -67,7 +67,7 @@ class mcmc(object):
                   )
     
   def __init__(self,logPost,args=[],N=2,mode='DEMC',filename=None,n_burnin=5,\
-    n_gr=None,cull=None,thin=1,parallel=False,n_p=None,**kwargs):
+    n_gr=None,cull=None,thin=1,parallel=False,**kwargs):
     """
     Initialise the MCMC
     
@@ -90,6 +90,7 @@ class mcmc(object):
       #if n_p is None: n_p = multiprocessing.cpu_count()//2 # use number of physical cores by default
       #self.n_p = n_p
       # pool and map_func are assigned dynamically for parallel execution
+      self.map_func = map
     else:
       self.parallel = False
       self.map_func = map
@@ -260,9 +261,12 @@ class mcmc(object):
     print("{} chain initialised...".format(self.mode))
     print(" No Chains: {}".format(self.N))
     print(" Posterior probability function: {}".format(LogPosterior))
+    if self.parallel: print(" Running in parallel with {} processes".format(self.n_p))
     if burn: print(" Burn in: {} ({} samples)".format(burn,self.N*burn))
     if chain: print(" Chain length: {} ({} samples)".format(chain,self.N*chain))
-    print(" Starting marginalised distributions:")
+    if self.filename is not None: print(" Output autosaved to file: {}".format(self.filename))
+    else: print(" No filename given for autosave")
+    print(" Starting (marginalised) distributions:")
     print(" par = mean += stdev")
     means = self.X.mean(axis=0)
     for q in range(len(self.errors)):
@@ -275,7 +279,7 @@ class mcmc(object):
       print("{}/{} chains are in restricted parameter space (logP = -inf)".format(np.isinf(self.XlogP).sum(),self.N))
 
     if np.any(self.XlogP-self.XlogP.max()+self.dlogP < 0 ):
-      print("{}/{} chains are more than dlogP ({}) from maximum logP".format(np.sum(self.XlogP-self.XlogP.max()+self.dlogP < 0),self.N,self.dlogP))
+      print("{}/{} chains are more than dlogP ({}) from maximum logP (excluding infs)".format(np.sum(self.XlogP-self.XlogP.max()+self.dlogP < 0)-np.sum(np.isinf(self.XlogP)),self.N,self.dlogP))
     
     print('-' * 100)
                 
@@ -565,6 +569,10 @@ class mcmc(object):
     """
 
     if n_extensions is not None: self.n_extensions = n_extensions
+    
+    if self.n_extensions == 0:
+      print("n_extensions is set to 0. Nothing to run")
+      return self.p,self.e
     
     for n in range(self.n_extensions):
       #test gr stat is ok
@@ -1054,7 +1062,14 @@ class mcmc(object):
     else:
       ind = np.random.randint(0,X[:,0].size,Nsamples)
       return X[ind]
-  
+
+  def best_fit(self,Nsamples=None):
+    """
+    Simple function to return best fit sample from current chain
+    """
+        
+    return self.chains_reshaped(1)[np.argmax(self.log_prob.reshape(-1))]
+            
   def computeGR(self,X=None,conv=0,n_gr=None):
     """
     Compute the Gelman and Rubin statistic and errors for all variable parameters
@@ -1160,6 +1175,16 @@ class mcmc(object):
   def results(self):
     return np.mean(self.chains_reshaped(1),axis=0),np.std(self.chains_reshaped(1),axis=0)
   grs = property(computeGR)
+
+  @property
+  def p_bf(self):
+    """
+    Simple function to return best fit pars from the current chains.
+    """
+    
+    best_fit = self.chains.reshape(-1,self.chains.shape[-1],order='C')[self.log_prob.ravel(order='C').argmax()]
+    
+    return best_fit
   
   ########################################################################################
   ########################################################################################
@@ -1334,7 +1359,7 @@ class mcmc(object):
     par,par_err = np.copy(p),np.copy(e)
     
     for i in np.arange(e.size)[e>0]:
-      if verbose: print("optiming+root finding p[{}]".format(i))
+      if verbose: print("optimising+root finding p[{}]".format(i))
       value,pos_err,neg_err = self.error1D(i,p=p,e=e,max_attempts=1000)
       
       par[i] = value
@@ -1349,4 +1374,38 @@ class mcmc(object):
 #add some methods from external files
 from .ImportanceSampler import imsamp
 mcmc.imsamp = imsamp
+
+
+def computeGR(X,conv=0,n_gr=2):
+  """
+  Compute the Gelman and Rubin statistic and errors for all variable parameters
+   after optionally reshaping chains.
+  Convergence is given in terms of original chain length
+  """
+  
+  N = X.shape[1] # no of chains
+  X = X.reshape(-1,n_gr,X.shape[-1])
+  conv = conv * N // n_gr #rescale convergence to match new shape
+  L = X.shape[0]-conv #length of individual chain
+  assert conv>=0, ValueError("conv must be >=0")
+  assert L>0, ValueError("conv set is too high for chain of length {}".format(X.shape[0]))
+  X = X[conv:] #filter out steps before convergence
+
+  #compute only for variables
+  p = np.where(X.std(axis=(0,1))>0)[0]
+  grs = np.zeros((X.std(axis=(0,1))>0).sum())
+  
+  for i in p:
+  
+    #get mean and variance for the individual chains
+    mean = X[...,i].mean(axis=0)
+    var = X[...,i].var(axis=0)
+        
+    #and calculate the GR stat
+    W = var.mean(dtype=np.float64) #mean of the variances
+    B = mean.var(dtype=np.float64) #variance of the means
+    grs[i] = np.sqrt((((L-1.)/L)*W + B) / W) #GR stat
+
+  return grs
+
 

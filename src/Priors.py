@@ -168,5 +168,30 @@ def addlogPriorClassMethod(*args,**kwargs):
   if func is None: return decorator
   else: return log_posterior
 
+def uniform_logPrior(bounds=None,lower=None,upper=None):
+  """
+  Simple function to create log prior from inputs, returns the logP function.
+  
+  logPosterior = inferno.logPrior(logLikelihood,[(-1,1),(-2,2),None],p=[0,0,0],e=[1,1,1])
+  logPrior = inferno.logPrior([(-1,1),(-2,2),None],p=[0,0,0],e=[1,1,1])
+  
+  """
+  
+  if bounds is not None:
+    lower = np.array([t[0] if type(t) is tuple else -np.inf for t in bounds])
+    upper = np.array([t[1] if type(t) is tuple else np.inf for t in bounds])
+  else:
+    if lower is None and upper is None:
+      raise ValueError("must provide bounds or lower/upper lims")
+    
+  def log_prior(x,*args,**kwargs):
+    """
+    logPrior with simple bounds
+    """
+    if np.any(x<lower): return -np.inf
+    elif np.any(x>upper): return -np.inf
+    else: return log_normal(x)
+  
+  return log_prior
 
   

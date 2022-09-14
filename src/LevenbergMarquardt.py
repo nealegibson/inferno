@@ -77,7 +77,7 @@ def LevMar(func,par,func_args,y,err=None,fixed=None,bounds=None,return_BIC=False
   
   #perform the optimisation:
   #if bounds is None: R = leastsq(LM_ErrFunc,var_par,(func,func_args,y,err,fixed,fixed_par),full_output=1)
-  R = least_squares(LM_ErrFunc,var_par,args=(func,func_args,y,err,fixed,fixed_par),method=method,verbose=0,bounds=bounds_trf,**kwargs)
+  R = least_squares(LM_ErrFunc,var_par,args=(func,func_args,y,err,fixed,fixed_par),method=method,verbose=verbose,bounds=bounds_trf,**kwargs)
   fitted_par = R.x
   H = np.dot(R.jac.T,R.jac) #hessian matrix
   K_fit = np.linalg.inv(H) #covariance matrix
