@@ -502,7 +502,7 @@ class mcmc(object):
     #need to delete the pool and map_func to save a parallel chain for some reason
     #but these are reloaded anyway each time pool is used
     if hasattr(self,'pool'): del self.pool
-    if hasattr(self,'map_func'): del self.map_func
+    if hasattr(self,'map_func') and self.parallel: del self.map_func
     
     #get global filename if not provided
     if filename is None: filename = self.filename
@@ -657,6 +657,10 @@ class mcmc(object):
     ind_good = np.where(~cull_index)[0]
     #assert ind_good.size >= 4, "must have more than 4 good points for culling (have {})!".format(ind_good.size)
     if not ind_good.size >= 4: raise ValueError("must have more than 4 good points for culling (have {})!".format(ind_good.size))
+
+    if self.mode=='AffInv' or self.mode=='DEMC':
+      ndim = (~np.isclose(0,np.diag(self.K))).sum()
+      if ind_good.size < 2*ndim: raise ValueError("Number of good points[{}] must be >> 2 x ndim[2x{}]".format(ind_good.size,ndim))
     
     #get random index from good points to replace each bad point
     good_points_ind = np.random.choice(ind_good,cull_index.sum())
